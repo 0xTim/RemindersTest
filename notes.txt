@@ -1,0 +1,125 @@
+vapor new Reminder
+
+Edit Package.swift and add in LeafProvider and AuthProvider
+swift package update
+vapor xcode -y
+Add LeafProvider to Config setup
+
+Build and Run
+
+Delete all PostStuff and routes
+
+Create Reminder Model
+
+import FluentProvider
+
+final class Reminder: Model {
+
+    let storage = Storage()
+
+    let title: String
+    let description: String
+
+    init(title: String, description: String) {
+        self.title = title
+        self.description = description
+    }
+
+    init(row: Row) throws {
+        title = try row.get("title")
+        description = try row.get("description")
+    }
+
+    func makeRow() throws -> Row {
+        var row = Row()
+        try row.set("title", title)
+        try row.set("description", description)
+        return row
+    }
+}
+
+extension Reminder: Preparation {
+    static func prepare(_ database: Database) throws {
+        try database.create(self) { builder in
+            builder.id()
+            builder.string("title")
+            builder.string("description")
+        }
+    }
+
+    static func revert(_ database: Database) throws {
+        try database.delete(self)
+    }
+}
+
+extension Reminder: JSONConvertible {
+    convenience init(json: JSON) throws {
+        try self.init(title: json.get("title"), description: json.get("description"))
+    }
+
+    func makeJSON() throws -> JSON {
+        var json = JSON()
+        try json.set("id", id)
+        try json.set("title", title)
+        try json.set("description", description)
+        return json
+    }
+}
+
+extension Reminder: ResponseRepresentable {}
+
+create ReminderController:
+
+import Vapor
+import FluentProvider
+
+struct ReminderController {
+
+    func addRoutes(drop: Droplet) {
+        let reminderGroup = drop.grouped("api", "reminders")
+        reminderGroup.get(handler: allReminders)
+        reminderGroup.post("create", handler: createReminder)
+        reminderGroup.get(Reminder.parameter, handler: getReminder)
+    }
+
+    func allReminders(_ req: Request) throws -> ResponseRepresentable {
+        let reminders = try Reminder.all()
+
+        return try reminders.makeJSON()
+    }
+
+    func createReminder(_ req: Request) throws -> ResponseRepresentable {
+        let reminder = try req.reminder()
+        try reminder.save()
+        return reminder
+    }
+
+    func getReminder(_ req: Request) throws -> ResponseRepresentable {
+        let reminder = try req.parameters.next(Reminder.self)
+        return reminder
+    }
+}
+
+extension Request {
+    /// Create a post from the JSON body
+    /// return BadRequest error if invalid
+    /// or no JSON
+    func reminder() throws -> Reminder {
+        guard let json = json else { throw Abort.badRequest }
+        return try Reminder(json: json)
+    }
+}
+
+Add the Reminder to the preparations, and then to setup routes:
+let reminderController = ReminderController()
+reminderController.addRoutes(drop: self)
+
+Send request to http://localhost:8080/api/reminders/ and show empty array
+Send request to http://localhost:8080/api/reminders/create/ with JSON:
+
+{
+    "title": "Lunch",
+    "description": "Buy tuna sandwich"
+}
+
+Then send request to http://localhost:8080/api/reminders/1/ to show reminder created, then again to http://localhost:8080/api/reminders/ to show it in the list
