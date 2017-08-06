@@ -54,3 +54,13 @@ extension Reminder: JSONConvertible {
 }
 
 extension Reminder: ResponseRepresentable {}
+
+extension Reminder: NodeRepresentable {
+    func makeNode(in context: Context?) throws -> Node {
+        var node = Node([:], in: nil)
+        try node.set("id", id)
+        try node.set("title", title)
+        try node.set("description", description)
+        return node
+    }
+}

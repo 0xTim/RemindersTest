@@ -1,0 +1,22 @@
+#extend("base")
+
+#export("head") {
+    <title>Home | Reminders</title>
+}
+
+#export("body") {
+    <div class="container">
+        <h1>Reminders</h1>
+
+        <table class="table">
+            <thead class="thead-default">
+                <tr><th>Title</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+
+            </tbody>
+
+        </table>
+
+    </div> <!-- container -->
+}

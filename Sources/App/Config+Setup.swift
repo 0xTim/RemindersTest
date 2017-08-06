@@ -1,5 +1,7 @@
 import FluentProvider
 import LeafProvider
+import AuthProvider
+import Sessions
 
 extension Config {
     public func setup() throws {
@@ -9,6 +11,9 @@ extension Config {
 
         try setupProviders()
         try setupPreparations()
+        
+        addConfigurable(middleware: SessionsMiddleware.init, name: "sessions")
+        addConfigurable(middleware: PersistMiddleware.init(User.self), name: "persist")
     }
     
     /// Configure providers
@@ -21,5 +26,7 @@ extension Config {
     /// schemas prepared before the app boots
     private func setupPreparations() throws {
         preparations.append(Reminder.self)
+        preparations.append(User.self)
+        preparations.append(UserSeed.self)
     }
 }
