@@ -390,3 +390,7 @@ Add it to the `droplet.json` config file:
     "persist"
 ],
 ```
+
+# Vapor Cloud
+
+Run `vapor-beta cloud deploy` (do an incremental build)
