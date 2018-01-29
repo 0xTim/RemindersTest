@@ -44,6 +44,11 @@ final class Reminder: Codable {
     var id: Int?
     var title: String
     var description: String
+
+    init(title: String, description: String) {
+        self.title = title
+        self.description = description
+    }
 }
 
 extension Reminder: Model {
@@ -135,27 +140,37 @@ Then send request to http://localhost:8080/api/reminders/1/ to show reminder cre
 * Create views directory: mkdir -p Resources/Views/
 * Copy in base.leaf, index.leaf, login.leaf and reminder.leaf and style.css
 
+## Configure.swift
+
+```swift
+try services.register(LeafProvider())
+```
+
 ## ReminderWebController:
 
 ```swift
 import Vapor
+import Leaf
 
-struct ReminderWebController {
+struct ReminderWebController: RouteCollection {
 
-    let drop: Droplet
-
-    func addRoutes() {
-        drop.get(handler: indexHandler)
+    func boot(router: Router) throws {
+        router.get(use: indexHandler)
     }
 
-    func indexHandler(_ req: Request) throws -> ResponseRepresentable {
-        return try drop.view.make("index", [
-            "reminders": try Reminder.all()
-            ])
+    func indexHandler(_ req: Request) throws -> Future<View> {
+        return Reminder.query(on: req).all().flatMap(to: View.self) { reminders in
+            let context = IndexData(title: "Homepage", reminders: reminders)
+            return try req.make(LeafRenderer.self).render("index", context)
+        }
     }
-
-
 }
+
+struct IndexData: Encodable {
+    let title: String
+    let reminders: [Reminder]?
+}
+
 ```
 
 Then add to index.leaf:
@@ -177,46 +192,59 @@ Demo:
 ```swift
 import Vapor
 
-struct ReminderWebController {
+struct ReminderWebController: RouteCollection {
 
-    let drop: Droplet
-
-    func addRoutes() {
-        drop.get(handler: indexHandler)
-        drop.get("create", handler: createHandler)
-        drop.post("create", handler: createPostHandler)
-        drop.get("reminder", Reminder.parameter, handler: reminderHandler)
+    func boot(router: Router) throws {
+        router.get(use: indexHandler)
+        router.get("create", use: createHandler)
+        router.post("create", use: createPostHandler)
+        router.get("reminders", Reminder.parameter, handler: reminderHandler)
     }
 
-    func indexHandler(_ req: Request) throws -> ResponseRepresentable {
-        return try drop.view.make("index", [
-            "reminders": try Reminder.all()
-            ])
-    }
-
-    func createHandler(_ req: Request) throws -> ResponseRepresentable {
-        return try drop.view.make("create")
-    }
-
-    func createPostHandler(_ req: Request) throws -> ResponseRepresentable {
-        guard let title = req.data["title"]?.string, let description = req.data["description"]?.string else {
-            throw Abort.badRequest
+    func indexHandler(_ req: Request) throws -> Future<View> {
+        return Reminder.query(on: req).all().flatMap(to: View.self) { reminders in
+            let context = IndexData(title: "Homepage", reminders: reminders)
+            return try req.make(LeafRenderer.self).render("index", context)
         }
-
-        let reminder = Reminder(title: title, description: description)
-        try reminder.save()
-
-        return Response(redirect: "/reminder/\(reminder.id?.string ?? "NULL")")
     }
 
-    func reminderHandler(_ req: Request) throws -> ResponseRepresentable {
-        let reminder = try req.parameters.next(Reminder.self)
+    func createHandler(_ req: Request) throws -> Future<View> {
+        return try req.make(LeafRenderer.self).render("create")
+    }
 
-        return try drop.view.make("reminder", ["reminder": reminder])
+    func createPostHandler(_ req: Request) throws -> Future<Response> {
+        return try req.content.decode(CreateReminderData.self).flatMap(to: Response.self) { data in
+            let reminder = Reminder(title: data.title, description: data.description)
+            return reminder.save(on: req).map(to: Response.self) { reminder in
+                guard let id = reminder.id else {
+                    return req.redirect(to: "/")
+                }
+                return req.redirect(to: "/reminders/\(id)")
+            }
+        }
+    }
+
+    func reminderHandler(_ req: Request) throws -> Future<View> {
+        return try req.parameter(Reminder.self).flatMap(to: View.self) { reminder in
+            let context = ReminderContext(reminder: reminder)
+            return try req.make(LeafRenderer.self).render("reminder", context)
+        }
     }
 
 }
+
+struct CreateReminderData: Content {
+    static let defaultMediaType = MediaType.urlEncodedForm
+    let title: String
+    let description: String
+}
+
+struct ReminderContext: Encodable {
+    let reminder: Reminder
+}
 ```
+
+> The rest is to do
 
 # User Model
 
