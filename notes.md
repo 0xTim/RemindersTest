@@ -2,125 +2,120 @@
 
 `vapor new Reminder`
 
-Edit Package.swift and add in LeafProvider and AuthProvider, then:
+Edit Package.swift and add in Fluent, FluentSQLite, Leaf and Auth, then:
 
 * `swift package update`
 * `vapor xcode -y`
-* Add LeafProvider to Config setup
-* Build and Run
-* Delete all PostStuff and routes
+* Build and Run and hit hello
+
+# Sample Routes
+
+```swift
+router.get("hello", "vapor") { req in
+    return "Hello Vapor!"
+}
+
+router.get("hello", String.parameter) { req -> String in
+    let name = try req.parameter(String.self)
+    return "Hello \(name)!"
+}
+
+router.post("info") { req -> WhoamiResponse in
+    let data = try req.content.decode(WhoamiData.self).await(on: req)
+    return InfoResponse(request: data)
+}
+
+struct WhoamiData: Content {
+  let name: String
+}
+
+struct WhoamiResponse: Content {
+  let request: WhoamiData
+}
+```
+
 
 # Reminder Model
 
 ```swift
-import FluentProvider
+import FluentSQLite
 
-final class Reminder: Model {
-
-    let storage = Storage()
-
-    let title: String
-    let description: String
-
-    init(title: String, description: String) {
-        self.title = title
-        self.description = description
-    }
-
-    init(row: Row) throws {
-        title = try row.get("title")
-        description = try row.get("description")
-    }
-
-    func makeRow() throws -> Row {
-        var row = Row()
-        try row.set("title", title)
-        try row.set("description", description)
-        return row
-    }
+final class Reminder: Codable {
+    var id: Int?
+    var title: String
+    var description: String
 }
 
-extension Reminder: Preparation {
-    static func prepare(_ database: Database) throws {
-        try database.create(self) { builder in
-            builder.id()
-            builder.string("title")
-            builder.string("description")
-        }
-    }
-
-    static func revert(_ database: Database) throws {
-        try database.delete(self)
-    }
+extension Reminder: Model {
+    typealias Database = SQLiteDatabase
+    static let idKey = \Reminder.id
 }
 
-extension Reminder: JSONConvertible {
-    convenience init(json: JSON) throws {
-        try self.init(title: json.get("title"), description: json.get("description"))
-    }
+extension Reminder: Content, Migration {}
+```
 
-    func makeJSON() throws -> JSON {
-        var json = JSON()
-        try json.set("id", id)
-        try json.set("title", title)
-        try json.set("description", description)
-        return json
-    }
+Or even change it to:
+
+```swift
+extension Reminder: SQLiteModel {
+  static let idKey = \Reminder.id
 }
-
-extension Reminder: ResponseRepresentable {}
 ```
 
 # ReminderController
 
 ```swift
 import Vapor
-import FluentProvider
+import Fluent // needed?
 
-struct ReminderController {
+struct ReminderController: RouteCollection {
 
-    func addRoutes(drop: Droplet) {
-        let reminderGroup = drop.grouped("api", "reminders")
-        reminderGroup.get(handler: allReminders)
-        reminderGroup.post("create", handler: createReminder)
-        reminderGroup.get(Reminder.parameter, handler: getReminder)
+    func boot(router: Router) throws {
+        let reminderGroup = router.grouped("api", "reminders")
+        reminderGroup.get(use: allReminders)
+        reminderGroup.post("create", use: createReminder)
+        reminderGroup.get(Reminder.parameter, use: getReminder)
     }
 
-    func allReminders(_ req: Request) throws -> ResponseRepresentable {
-        let reminders = try Reminder.all()
-
-        return try reminders.makeJSON()
+    func allReminders(_ req: Request) throws -> Future<[Reminder]> {
+        return Acronym.query(on: req).all()
     }
 
-    func createReminder(_ req: Request) throws -> ResponseRepresentable {
-        let reminder = try req.reminder()
-        try reminder.save()
-        return reminder
+    func createReminder(_ req: Request) throws -> Future<Reminder> {
+        return try req.content.decode(Reminder.self).flatMap(to: Reminder.self) { reminder in
+            return reminder.save(on: req)
+        }
     }
 
-    func getReminder(_ req: Request) throws -> ResponseRepresentable {
-        let reminder = try req.parameters.next(Reminder.self)
-        return reminder
+    func getReminder(_ req: Request) throws -> Future<Reminder> {
+        return try req.parameter(Reminder.self)
     }
 }
 
-extension Request {
-    /// Create a post from the JSON body
-    /// return BadRequest error if invalid
-    /// or no JSON
-    func reminder() throws -> Reminder {
-        guard let json = json else { throw Abort.badRequest }
-        return try Reminder(json: json)
-    }
-}
-
+extension Reminder: Parameter {}
 ```
 
-Add the Reminder to the preparations, and then to setup routes:
+To configure the database:
+
+```swift
+try services.register(FluentProvider())
+try services.register(FluentSQLiteProvider())
+
+let database = SQLiteDatabase(storage: .memory))
+var databaseConfig = DatabaseConfig()
+databaseConfig.add(database: database, as: .sqlite)
+services.register(databaseConfig)
+
+var migrationConfig = MigrationConfig()
+migrationConfig.add(model: Reminder.self, database: .sqlite)
+services.register(migrationConfig)
+```
+
+Then to setup routes:
 
 ```swift
 let reminderController = ReminderController()
-reminderController.addRoutes(drop: self)
+try router.register(collection: reminderController)
 ```
 
 * Send request to http://localhost:8080/api/reminders/ and show empty array
@@ -160,20 +155,6 @@ struct ReminderWebController {
     }
 
 
-}
-```
-
-Add `NodeRepresentable` extension to Reminder:
-
-```swift
-extension Reminder: NodeRepresentable {
-    func makeNode(in context: Context?) throws -> Node {
-        var node = Node([:], in: nil)
-        try node.set("id", id)
-        try node.set("title", title)
-        try node.set("description", description)
-        return node
-    }
 }
 ```
 
