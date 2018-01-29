@@ -13,15 +13,10 @@
                 <tr><th>Title</th><th>Description</th></tr>
             </thead>
             <tbody>
-            #if(reminders) {
-                #loop(reminders, "reminder") {
-                    <tr><td><a href="/reminders/#(reminder.id)/">#(reminder.title)</a></td><td>#(reminder.description)</td></tr>
-                }
-            }
-            </tbody>
-        </table>
 
-        <a href="/create" class="btn btn-primary">Create a Reminder</a>
+            </tbody>
+
+        </table>
 
     </div> <!-- container -->
 }

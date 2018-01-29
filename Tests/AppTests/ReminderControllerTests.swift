@@ -3,7 +3,7 @@ import Testing
 import HTTP
 import Sockets
 @testable import Vapor
-@testable import App
+import App
 
 /// This file shows an example of testing an
 /// individual controller without initializing
