@@ -1,6 +1,6 @@
 # Start
 
-`vapor new Reminder`
+`vapor new Reminder --branch=beta`
 
 Edit Package.swift and add in Fluent, FluentSQLite, Leaf and Auth, then:
 
